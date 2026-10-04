@@ -1,0 +1,63 @@
+{
+  "blocks": [
+    {
+      "type": "h",
+      "level": 1,
+      "text": "How a short technical note is placed"
+    },
+    {
+      "type": "p",
+      "text": "This note shows an inherited heading, a linear equation, a table, and an optional figure. It is a formatting example, not a measurement [N1]."
+    },
+    {
+      "type": "eq",
+      "lines": [
+        "y = ax + b"
+      ]
+    },
+    {
+      "type": "table",
+      "headers": [
+        "Item",
+        "Role"
+      ],
+      "rows": [
+        [
+          "Equation",
+          "Editable text"
+        ],
+        [
+          "Figure",
+          "Optional"
+        ]
+      ]
+    },
+    {
+      "type": "p",
+      "text": "Figure A is a generated illustration. It does not report an observation."
+    },
+    {
+      "type": "figure",
+      "id": "A",
+      "mention": "Figure A",
+      "asset": "illustration",
+      "source": "examples/illustrative.png",
+      "caption": "Figure A. Generated illustration for layout only. Source: examples/illustrative.png. Not a measurement."
+    }
+  ],
+  "reference_heading": {
+    "level": 2,
+    "text": "Notes"
+  },
+  "references": [
+    {
+      "key": "N1",
+      "text": "[N1] Style-harness note. Not a paper citation."
+    }
+  ],
+  "assets": {
+    "illustration": {
+      "path": "illustrative.png"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+.env.*
+_workspace/
+*.audit.json
+*.pdf
+*.zip
+*.docx
+!template/report-style.docx
