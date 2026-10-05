@@ -303,6 +303,105 @@ def test_latex_equation_is_rejected(tmp: Path) -> None:
     assert not output.exists()
 
 
+def test_author_year_does_not_require_bracket_keys(tmp: Path) -> None:
+    """Author-year references do not need a fabricated [key] citation."""
+    # Given: an in-text author-year fragment and no bracket key.
+    text = "The note states the relation (Ada Lovelace, 1843)."
+    spec = tmp / "author-year.json"
+    spec.write_text(
+        json.dumps(
+            {
+                "citation_style": "author-year",
+                "blocks": [{"type": "p", "text": text}],
+                "references": [
+                    {
+                        "key": "Lovelace1843",
+                        "cite": "Ada Lovelace, 1843",
+                        "text": "Lovelace, A. (1843). A note on an analytical engine. Example Journal, 1, 1-2.",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp / "author-year.docx"
+    # When: the real CLI builds it.
+    result = run_cli(["--manuscript", str(spec), "--output", str(output), "--mode", "new"])
+    # Then: the author-year sentence is preserved and no bracket key was required.
+    assert result.returncode == 0, result.stderr
+    assert Document(str(output)).paragraphs[0].text == text
+    assert b"[Lovelace1843]" not in part(output, "word/document.xml")
+
+
+def test_author_year_missing_citation_is_rejected(tmp: Path) -> None:
+    """An author-year entry that never appears in a paragraph is rejected."""
+    # Given: a reference whose cite fragment is absent from the body.
+    spec = tmp / "author-year-missing.json"
+    spec.write_text(
+        json.dumps(
+            {
+                "blocks": [{"type": "p", "text": "No in-text citation appears here."}],
+                "references": [
+                    {
+                        "key": "Lovelace1843",
+                        "cite": "Ada Lovelace, 1843",
+                        "text": "Lovelace, A. (1843). A note on an analytical engine.",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp / "author-year-missing.docx"
+    # When: the real CLI attempts the build.
+    result = run_cli(["--manuscript", str(spec), "--output", str(output), "--mode", "new"])
+    # Then: the missing citation is rejected and no file is written.
+    assert result.returncode == 2 and "missing_reference" in result.stderr
+    assert not output.exists()
+
+
+def test_numbered_style_still_requires_keys(tmp: Path) -> None:
+    """Explicit numbered style does not accept an author-year sentence as a citation."""
+    # Given: a numbered request whose body has no [key].
+    spec = tmp / "numbered.json"
+    spec.write_text(
+        json.dumps(
+            {
+                "citation_style": "numbered",
+                "blocks": [{"type": "p", "text": "Only an author-year mention (Ada Lovelace, 1843)."}],
+                "references": [{"key": "L1", "text": "[L1] Lovelace note."}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp / "numbered.docx"
+    # When: the real CLI attempts the build.
+    result = run_cli(["--manuscript", str(spec), "--output", str(output), "--mode", "new"])
+    # Then: the numbered contract still fails closed.
+    assert result.returncode == 2 and "missing_reference" in result.stderr
+    assert not output.exists()
+
+
+def test_callouts_use_source_block_style(tmp: Path) -> None:
+    """Learning and summary callouts preserve the source's actual visual style."""
+    # Given: two native callout paragraphs in the textbook template.
+    spec = tmp / "callout.json"
+    spec.write_text(json.dumps({"blocks": [
+        {"type": "p", "role": "callout-title", "text": "LEARNING_TITLE"},
+        {"type": "p", "role": "callout-body", "text": "LEARNING_BODY"},
+    ]}), encoding="utf-8")
+    output = tmp / "callout.docx"
+    # When: the real CLI builds the manuscript.
+    result = run_cli(["--manuscript", str(spec), "--output", str(output), "--mode", "new"])
+    # Then: both paragraphs use the source callout style, not unstyled prose.
+    assert result.returncode == 0, result.stderr
+    paragraphs = Document(str(output)).paragraphs
+    assert [p.style.style_id for p in paragraphs] == ["BlockText", "BlockText"]
+    assert paragraphs[0].runs[0].bold is True
+    assert paragraphs[0].paragraph_format.keep_with_next is True
+    assert part(output, "word/styles.xml") == part(TEMPLATE, "word/styles.xml")
+
+
 def _reject(tmp: Path, source: Path, spec: Path) -> str:
     result = run_cli(
         ["--source", str(source), "--manuscript", str(spec), "--output", str(tmp / f"{spec.stem}.docx"), "--mode", "new"]
@@ -327,6 +426,10 @@ def main() -> None:
         ("windows-path", test_windows_path_is_preserved),
         ("literal-index", test_indexing_is_not_citation),
         ("latex-equation", test_latex_equation_is_rejected),
+        ("author-year", test_author_year_does_not_require_bracket_keys),
+        ("author-year-missing", test_author_year_missing_citation_is_rejected),
+        ("numbered-style", test_numbered_style_still_requires_keys),
+        ("callout-style", test_callouts_use_source_block_style),
     )
     for name, test in named:
         with tempfile.TemporaryDirectory(prefix=f"report-style-{name}-") as tmp:

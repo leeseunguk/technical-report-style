@@ -32,6 +32,7 @@ class HeadingBlock(FrozenModel):
 class ParagraphBlock(FrozenModel):
     type: Literal["p"]
     text: str = Field(min_length=1)
+    role: Literal["body", "callout-title", "callout-body"] = "body"
 
 
 class EquationBlock(FrozenModel):
@@ -61,6 +62,7 @@ class Asset(FrozenModel):
 class ReferenceEntry(FrozenModel):
     key: str = Field(min_length=1, pattern=KEY_PATTERN)
     text: str = Field(min_length=1)
+    cite: str | None = None
 
 
 class HeadingSpec(FrozenModel):
@@ -79,6 +81,7 @@ class Manuscript(FrozenModel):
     references: list[ReferenceEntry] = Field(default_factory=list)
     assets: dict[str, Asset] = Field(default_factory=dict)
     reference_heading: HeadingSpec | None = None
+    citation_style: Literal["numbered", "author-year"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,21 +292,80 @@ def _check_figure(
         raise ManuscriptError("malformed_figure", str(path)) from None
 
 
-def _check_references(manuscript: Manuscript) -> None:
-    known = {ref.key for ref in manuscript.references}
-    cited: set[str] = set()
-    found: set[str] = set()
-    for text in rendered_strings(manuscript):
-        found.update(CITATION_RE.findall(text))
+def citation_mode(manuscript: Manuscript) -> str:
+    """Numbered only when requested or when the manuscript already uses [key]."""
+    if manuscript.citation_style is not None:
+        return manuscript.citation_style
+    if any(ref.text.startswith(f"[{ref.key}]") for ref in manuscript.references):
+        return "numbered"
+    if _paragraph_keys(manuscript):
+        return "numbered"
+    if manuscript.references:
+        return "author-year"
+    return "numbered"
+
+
+def _paragraph_texts(manuscript: Manuscript) -> list[str]:
+    found: list[str] = []
     for block in manuscript.blocks:
         text = paragraph_text(block)
         if text is not None:
-            cited.update(CITATION_RE.findall(text))
-    missing = sorted(found - known)
+            found.append(text)
+    return found
+
+
+def _paragraph_keys(manuscript: Manuscript) -> set[str]:
+    found: set[str] = set()
+    for text in _paragraph_texts(manuscript):
+        found.update(CITATION_RE.findall(text))
+    return found
+
+
+def _bracket_keys(texts: list[str]) -> set[str]:
+    found: set[str] = set()
+    for text in texts:
+        found.update(CITATION_RE.findall(text))
+    return found
+
+
+def _reject_unknown_brackets(manuscript: Manuscript) -> None:
+    known = {ref.key for ref in manuscript.references}
+    missing = sorted(_bracket_keys(rendered_strings(manuscript)) - known)
     if missing:
-        joined = ", ".join(missing)
-        raise ManuscriptError("missing_reference", joined)
-    uncited = sorted(known - cited)
+        raise ManuscriptError("missing_reference", ", ".join(missing))
+
+
+def _check_references(manuscript: Manuscript) -> None:
+    mode = citation_mode(manuscript)
+    if mode == "numbered":
+        _check_numbered_references(manuscript)
+        return
+    if mode == "author-year":
+        _check_author_year_references(manuscript)
+        return
+    raise ManuscriptError("malformed_manuscript", "citation_style")
+
+
+def _check_numbered_references(manuscript: Manuscript) -> None:
+    """Explicit [key] citations. Literal indexing is not a citation."""
+    known = {ref.key for ref in manuscript.references}
+    _reject_unknown_brackets(manuscript)
+    uncited = sorted(known - _paragraph_keys(manuscript))
     if uncited:
-        joined = ", ".join(uncited)
-        raise ManuscriptError("missing_reference", joined)
+        raise ManuscriptError("missing_reference", ", ".join(uncited))
+
+
+def _check_author_year_references(manuscript: Manuscript) -> None:
+    """In-text cite fragments. Do not require a fabricated [key]."""
+    _reject_unknown_brackets(manuscript)
+    paragraphs = _paragraph_texts(manuscript)
+    missing: list[str] = []
+    for ref in manuscript.references:
+        cite = ref.cite
+        if cite is None or len(cite) < 6 or not any(char.isalpha() for char in cite):
+            missing.append(ref.key)
+            continue
+        if not any(cite in text for text in paragraphs):
+            missing.append(ref.key)
+    if missing:
+        raise ManuscriptError("missing_reference", ", ".join(missing))

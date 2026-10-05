@@ -58,15 +58,22 @@ python3 "$S/scripts/build_report.py" \
 외부 인용이 없으면 `references`도 생략할 수 있다.
 표의 행 길이는 머리행과 같아야 한다.
 
+학습 목표와 요점 정리 상자는 `p`에 `role: "callout-title"` 또는
+`role: "callout-body"`를 지정한다. 원본 `Block Text` 스타일의 배경과
+왼쪽 선을 계승하고 제목은 굵게 표시한다. 일반 문단은 `role`을 생략한다.
+
 그림에는 `id`, `mention`, `asset`, `caption`, `source`를 넣고,
 바로 앞 본문에서 `mention`으로 설명한다. 캡션에도 같은 표기와
-출처 문자열을 넣는다. 참고문헌 `key`는 본문 `[key]`와 대응한다.
-실제 입력 예제는 [examples/manuscript.json](examples/manuscript.json)을 본다.
+출처 문자열을 넣는다. 실제 입력 예제는 [examples/manuscript.json](examples/manuscript.json)을 본다.
 
-인용은 단어와 분리한 `[key]` 표기다. `samples[0]`처럼 식별자에 붙은
-대괄호와 연속 인덱싱은 일반 텍스트로 취급한다. 실제 인용 앞에는
-공백을 둔다. Windows 경로의 역슬래시는 본문에서 그대로 쓸 수 있다.
-`eq` 블록 안에서는 LaTeX 대신 일반 텍스트 식을 쓴다.
+새 교재형 보고서는 `citation_style`을 `author-year`로 두고, 각 참고문헌의
+`cite`에 본문과 같은 저자-연도 구절을 넣는다. `[key]`를 만들지 않는다.
+사용자가 번호 인용을 지정하면 `citation_style`을 `numbered`로 두고 본문
+`[key]`와 항목을 대응시킨다. 필드를 생략하면 항목이 `[key]`로 시작하거나
+본문에 `[key]`가 있을 때만 번호 규칙이고, 그렇지 않으면 저자-연도 규칙이다.
+`samples[0]`처럼 식별자에 붙은 대괄호와 연속 인덱싱은 인용이 아니다.
+실제 인용 앞에는 공백을 둔다. Windows 경로의 역슬래시는 본문에서 그대로
+쓸 수 있다. `eq` 블록 안에서는 LaTeX 대신 일반 텍스트 식을 쓴다.
 
 ## 포함된 규칙과 검사
 
@@ -91,5 +98,7 @@ python3 "$S/scripts/check_harness.py"
 ```
 
 새 문서, 의도한 그림 재사용, 이어쓰기 보존, 그림 없는 문서,
-잘못된 입력·덮어쓰기 거부, 원본 없는 이어쓰기 거부를 검사한다.
+잘못된 입력·덮어쓰기 거부, 원본 없는 이어쓰기 거부, Windows 경로,
+리터럴 인덱스, LaTeX 식 거부, 저자-연도 인용과 누락 인용,
+명시적 번호 인용과 원본 학습 상자 스타일 적용을 검사한다.
 다른 주제에 과거 예제의 수치·결론·장 번호를 복사하지 않는다.

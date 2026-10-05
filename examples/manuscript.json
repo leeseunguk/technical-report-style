@@ -1,13 +1,20 @@
 {
+  "citation_style": "author-year",
   "blocks": [
     {
       "type": "h",
       "level": 1,
-      "text": "How a short technical note is placed"
+      "text": "1. 짧은 교재 쪽의 배치"
     },
     {
       "type": "p",
-      "text": "This note shows an inherited heading, a linear equation, a table, and an optional figure. It is a formatting example, not a measurement [N1]."
+      "role": "callout-title",
+      "text": "이 장에서 배울 것"
+    },
+    {
+      "type": "p",
+      "role": "callout-body",
+      "text": "이 쪽은 교재 서식의 예시다. 식과 표, 그림을 배치하는 법을 살펴본다."
     },
     {
       "type": "eq",
@@ -18,41 +25,52 @@
     {
       "type": "table",
       "headers": [
-        "Item",
-        "Role"
+        "항목",
+        "역할"
       ],
       "rows": [
         [
-          "Equation",
-          "Editable text"
+          "식",
+          "편집 가능한 텍스트"
         ],
         [
-          "Figure",
-          "Optional"
+          "그림",
+          "선택"
         ]
       ]
     },
     {
       "type": "p",
-      "text": "Figure A is a generated illustration. It does not report an observation."
+      "text": "그림 A는 배치 설명용 예시이며 관측값이 아니다 (Style Note, 2026)."
     },
     {
       "type": "figure",
       "id": "A",
-      "mention": "Figure A",
+      "mention": "그림 A",
       "asset": "illustration",
       "source": "examples/illustrative.png",
-      "caption": "Figure A. Generated illustration for layout only. Source: examples/illustrative.png. Not a measurement."
+      "caption": "그림 A. 배치만을 위한 생성 그림이다. 출처: examples/illustrative.png. 측정 아님."
+    },
+    {
+      "type": "p",
+      "role": "callout-title",
+      "text": "요점 정리"
+    },
+    {
+      "type": "p",
+      "role": "callout-body",
+      "text": "제목, 식, 표, 그림과 저자-연도 인용은 각각의 문서 요소로 배치한다."
     }
   ],
   "reference_heading": {
     "level": 2,
-    "text": "Notes"
+    "text": "참고문헌"
   },
   "references": [
     {
-      "key": "N1",
-      "text": "[N1] Style-harness note. Not a paper citation."
+      "key": "StyleNote2026",
+      "cite": "Style Note, 2026",
+      "text": "Style Note. (2026). Formatting example for the textbook harness. Not a paper."
     }
   ],
   "assets": {
