@@ -38,12 +38,15 @@ class ParagraphBlock(FrozenModel):
 class EquationBlock(FrozenModel):
     type: Literal["eq"]
     lines: list[str] = Field(min_length=1)
+    latex: list[str] | None = None
+    source: str = Field(min_length=1)
 
 
 class TableBlock(FrozenModel):
     type: Literal["table"]
     headers: list[str] = Field(min_length=1)
     rows: list[list[str]]
+    source: str = Field(min_length=1)
 
 
 class FigureBlock(FrozenModel):
@@ -202,8 +205,16 @@ def validate_manuscript(manuscript: Manuscript, base: Path) -> dict[str, Path]:
     _check_keys(manuscript)
     resolved = _resolve_assets(manuscript, base)
     _check_blocks(manuscript, resolved)
+    _check_provenance(manuscript, base)
     _check_references(manuscript)
     return resolved
+
+
+def _check_provenance(manuscript: Manuscript, base: Path) -> None:
+    """Equation explanations and reader-visible sources."""
+    from provenance import check_provenance
+
+    check_provenance(manuscript, base)
 
 
 def _reject_latex(texts: list[str]) -> None:
@@ -239,10 +250,14 @@ def _check_blocks(manuscript: Manuscript, assets: dict[str, Path]) -> None:
                 _check_figure(manuscript, index, figure, used, figure_ids, assets)
             case TableBlock() as table:
                 _check_table(table)
-            case EquationBlock(lines=lines):
+            case EquationBlock(lines=lines, latex=latex):
                 _reject_latex(lines)
                 if any(line == "" for line in lines):
                     raise ManuscriptError("malformed_manuscript", "empty equation line")
+                if latex is not None and len(latex) != len(lines):
+                    raise ManuscriptError("malformed_manuscript", "latex line count")
+                if latex is not None and any(item.strip() == "" for item in latex):
+                    raise ManuscriptError("malformed_manuscript", "empty latex line")
             case HeadingBlock() | ParagraphBlock():
                 pass
             case unreachable:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["python-docx", "Pillow", "pydantic>=2", "typer"]
+# dependencies = ["python-docx", "Pillow", "pydantic>=2", "typer", "lxml", "latex2mathml", "mathml2omml"]
 # ///
 
 # ─── How to run ───
@@ -42,12 +42,16 @@ def main(
         Path | None,
         typer.Option("--audit", help="Audit JSON path. Default: <output>.audit.json"),
     ] = None,
+    ledger: Annotated[
+        Path | None,
+        typer.Option("--ledger", help="Source ledger JSON. Checked only; never written into the DOCX."),
+    ] = None,
 ) -> None:
     """Reuse styles. new drops old body and unrequested media; append keeps them."""
     try:
         parsed = parse_mode(mode)
         chosen = _source_for(parsed, source)
-        build_report(chosen, manuscript, output, parsed, audit)
+        build_report(chosen, manuscript, output, parsed, audit, ledger_path=ledger)
     except HarnessError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(2) from None

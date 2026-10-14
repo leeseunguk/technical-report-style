@@ -50,9 +50,13 @@ def assert_style(blob: bytes) -> None:
     tcx, tcy = int(tall_extent.get("cx", "0")), int(tall_extent.get("cy", "0"))
     assert tcy == MAX_HEIGHT_EMU and tcx <= MAX_WIDTH_EMU
     equation = find_paragraph(blob, "EQTOKEN")
-    assert _attr(_child(equation.find(f"{W}pPr"), "jc"), "val") == "center"
-    assert _attr(_child(equation.find(f"{W}r/{W}rPr"), "sz"), "val") == "21"
-    assert equation.find(".//{http://schemas.openxmlformats.org/officeDocument/2006/math}oMath") is None
+    assert _attr(_child(equation.find(f"{W}pPr"), "pStyle"), "val") == "BodyText"
+    assert not any((node.text or "").strip() for node in equation.findall(f".//{W}t"))
+    math = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
+    omath = equation.find(f".//{math}oMath")
+    assert omath is not None and "".join(omath.itertext()) == "EQTOKEN = 1"
+    justify = equation.find(f".//{math}jc")
+    assert justify is not None and justify.get(f"{math}val") == "center"
     body = find_paragraph(blob, "Body mentions Figure W")
     assert _attr(_child(body.find(f"{W}pPr"), "pStyle"), "val") == "BodyText"
     direct = body.find(f"{W}pPr/{W}spacing")

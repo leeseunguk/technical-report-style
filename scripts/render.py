@@ -7,14 +7,14 @@ from typing import Final, assert_never
 
 from docx.document import Document as DocumentType
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
+from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
 from docx.shared import Emu, Pt, RGBColor
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 from PIL import Image
 
-from errors import PackageError
+from errors import ManuscriptError, PackageError
 from manuscript import (
     EquationBlock,
     FigureBlock,
@@ -25,6 +25,7 @@ from manuscript import (
     has_table,
     heading_levels,
 )
+from native_math import equation_xml
 
 FIGURE_WIDTH_CM: Final = 15.5
 FIGURE_HEIGHT_CM: Final = 17.0
@@ -32,7 +33,6 @@ EMU_PER_CM: Final = 360_000
 MAX_HEIGHT_EMU: Final = round(FIGURE_HEIGHT_CM * EMU_PER_CM)
 CAPTION_PT: Final = 9.5
 CAPTION_COLOR: Final = RGBColor(0x22, 0x22, 0x22)
-EQUATION_PT: Final = 10.5
 TABLE_STYLE_CANDIDATES: Final = ("Table", "Light Grid Accent 1")
 
 
@@ -58,8 +58,8 @@ def render(document: DocumentType, loaded: LoadedManuscript) -> None:
                             paragraph.paragraph_format.keep_with_next = True
                     case unreachable_role:
                         assert_never(unreachable_role)
-            case EquationBlock(lines=lines):
-                add_equation(document, lines)
+            case EquationBlock() as equation:
+                add_equation(document, equation)
             case TableBlock(headers=headers, rows=rows):
                 add_table(document, headers, rows)
             case FigureBlock() as figure:
@@ -163,17 +163,33 @@ def add_paragraph(document: DocumentType, text: str) -> Paragraph:
     return paragraph
 
 
-def add_equation(document: DocumentType, lines: list[str]) -> None:
-    """Centered editable text at body size. Not an OMML equation."""
-    last = len(lines) - 1
-    for index, line in enumerate(lines):
-        paragraph = document.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        add_run(paragraph, line, size=EQUATION_PT, italic=True)
-        paragraph.paragraph_format.space_before = Pt(1)
-        paragraph.paragraph_format.space_after = Pt(1)
+def add_equation(document: DocumentType, block: EquationBlock) -> None:
+    """Centered native Office Math. The conversion source is not written."""
+    sources = block.latex
+    last = len(block.lines) - 1
+    for index, line in enumerate(block.lines):
+        latex = None if sources is None else sources[index]
+        name = body_style(document)
+        paragraph = document.add_paragraph(style=name) if name is not None else document.add_paragraph()
         if index != last:
             paragraph.paragraph_format.keep_with_next = True
+        try:
+            math_xml = equation_xml(line, latex)
+        except ValueError:
+            raise ManuscriptError("math_conversion", f"line {index + 1}") from None
+        paragraph._p.append(_office_display(math_xml))
+
+
+def _office_display(math_xml: str):
+    """Display equation centered the way the textbook centers Office Math."""
+    display = OxmlElement("m:oMathPara")
+    props = OxmlElement("m:oMathParaPr")
+    justify = OxmlElement("m:jc")
+    justify.set(qn("m:val"), "center")
+    props.append(justify)
+    display.append(props)
+    display.append(parse_xml(math_xml))
+    return display
 
 
 def add_table(document: DocumentType, headers: list[str], rows: list[list[str]]) -> None:
