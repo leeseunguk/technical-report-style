@@ -26,6 +26,8 @@ from manuscript import (
     load_manuscript,
     rendered_strings,
 )
+from ledger import check_ledger
+from word_compat import assert_word_compatible
 from package_audit import (
     disallowed_package_changes,
     document_xml,
@@ -54,13 +56,20 @@ def build_report(
     output: Path,
     mode: BuildMode,
     audit_path: Path | None = None,
+    *,
+    ledger_path: Path | None = None,
 ) -> BuildAudit:
     """Create output from source styles and a manuscript. Never writes to source."""
     if not source.is_file():
         raise PackageError("missing_source", str(source))
     loaded = load_manuscript(manuscript_path)
+    if ledger_path is not None:
+        check_ledger(loaded, ledger_path)
     audit_dest = audit_path if audit_path is not None else output.parent / f"{output.name}.audit.json"
-    assert_safe_outputs(output, audit_dest, [source, manuscript_path, *loaded.assets.values()])
+    protected = [source, manuscript_path, *loaded.assets.values()]
+    if ledger_path is not None:
+        protected.append(ledger_path)
+    assert_safe_outputs(output, audit_dest, protected)
     source_hash = sha256_file(source)
     with tempfile.TemporaryDirectory(prefix="report-style-") as tmp:
         staged = Path(tmp) / "staged.docx"
@@ -169,6 +178,7 @@ def ensure_parent(path: Path) -> None:
 
 
 def _reject_broken(source: Path, staged: Path, loaded: LoadedManuscript, mode: BuildMode) -> None:
+    assert_word_compatible(staged)
     source_xml = document_xml(source)
     output_xml = document_xml(staged)
     if geometry_token(source_xml) != geometry_token(output_xml):

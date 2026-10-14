@@ -8,7 +8,16 @@ import zipfile
 from pathlib import Path
 from typing import Final
 
-import xml.etree.ElementTree as ET
+try:
+    # lxml preserves original namespace prefixes and declarations referenced
+    # only inside attribute values (xsi:type, mc:Ignorable); stdlib ElementTree
+    # rewrites prefixes to ns0/ns1 and drops those declarations, producing
+    # packages Word rejects as unreadable.
+    from lxml import etree as ET
+    _HAS_LXML = True
+except ImportError:  # pragma: no cover
+    import xml.etree.ElementTree as ET
+    _HAS_LXML = False
 
 from errors import PackageError
 
@@ -212,4 +221,9 @@ def _local(el: ET.Element) -> str:
 
 
 def _xml_bytes(root: ET.Element) -> bytes:
+    if not _HAS_LXML:
+        raise PackageError(
+            "lxml_required",
+            "package reserialization needs lxml; stdlib ElementTree corrupts namespaces",
+        )
     return ET.tostring(root, xml_declaration=True, encoding="UTF-8")
