@@ -15,7 +15,7 @@ from errors import ManuscriptError
 KEY_PATTERN: Final = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,64}$"
 CITATION_RE: Final = re.compile(r"(?<![\w\]])\[([A-Za-z0-9][A-Za-z0-9._:-]{0,64})\]")
 LATEX_MARKERS: Final = ("\\", "$$")
-EQUATION_NUMBER_RE: Final = re.compile(r"\(\d+\)\s+.+|.+\s+\(\d+\)")
+EQUATION_NUMBER_RE: Final = re.compile(r"\(\d+[a-z]?\)\s+.+|.+\s+\(\d+[a-z]?\)")
 
 
 class FrozenModel(BaseModel):

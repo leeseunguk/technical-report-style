@@ -24,7 +24,7 @@ from provenance import EQ_NUMBER_RE, _MIN_CITE, _file_exists
 
 UNVERIFIED: Final = ("확인하지 못", "not verified")
 ITEM_PATTERN: Final = (
-    r"^(?:eq:\d+|fig:[A-Za-z0-9][A-Za-z0-9._:-]{0,64}|table:\d+|claim:\S+)$"
+    r"^(?:eq:\d+[a-z]?|fig:[A-Za-z0-9][A-Za-z0-9._:-]{0,64}|table:\d+|claim:\S+)$"
 )
 
 

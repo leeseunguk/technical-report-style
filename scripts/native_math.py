@@ -12,8 +12,8 @@ from errors import PackageError
 
 MATH_NS: Final = "http://schemas.openxmlformats.org/officeDocument/2006/math"
 XML_SPACE: Final = "{http://www.w3.org/XML/1998/namespace}space"
-_LEADING_NUMBER: Final = re.compile(r"\((\d+)\)\s+.+")
-_TRAILING_NUMBER: Final = re.compile(r".+\s+\((\d+)\)")
+_LEADING_NUMBER: Final = re.compile(r"\((\d+[a-z]?)\)\s+.+")
+_TRAILING_NUMBER: Final = re.compile(r".+\s+\((\d+[a-z]?)\)")
 Converter = Callable[[str], str]
 
 

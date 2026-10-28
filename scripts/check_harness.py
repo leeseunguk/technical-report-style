@@ -493,6 +493,43 @@ def test_equation_number_is_required(tmp: Path) -> None:
     assert not output.exists()
 
 
+def test_sub_numbered_derivation_steps(tmp: Path) -> None:
+    """Derivation steps "(1a)" build as numbered lines and need their own ledger rows."""
+    # Given: a parent equation and two derivation steps, each explained in prose.
+    spec = tmp / "steps.json"
+    spec.write_text(
+        json.dumps(
+            {
+                "blocks": [
+                    {"type": "eq", "lines": ["y = 2x    (1)"], "source": "this document derives (1)"},
+                    {"type": "p", "text": "(1) is a line; this document derives (1) in the steps below."},
+                    {"type": "eq", "lines": ["y = x + x    (1a)", "x + x = 2x    (1b)"], "source": "how this document derives (1)"},
+                    {"type": "p", "text": "(1a) adds x twice and (1b) collects it; this is how this document derives (1)."},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp / "steps.docx"
+    # When: the real CLI builds it.
+    result = run_cli(["--manuscript", str(spec), "--output", str(output), "--mode", "new"])
+    # Then: the build succeeds and "(1a)" sits right of its equation line like "(1)".
+    assert result.returncode == 0, result.stderr
+    _assert_number_flush_right(_equation_paragraph(output, "(1a)"), "(1a)")
+    # When: a ledger covers only the parent equation.
+    ledger = tmp / "steps-ledger.json"
+    ledger.write_text(
+        json.dumps(
+            [{"item": "eq:1", "location": "(1)", "citation": "this document", "kind": "derived",
+              "checked_against": {"file": str(spec), "symbol": "eq 1"}, "status": "verified"}]
+        ),
+        encoding="utf-8",
+    )
+    missing = run_cli(["--manuscript", str(spec), "--ledger", str(ledger), "--output", str(tmp / "steps2.docx"), "--mode", "new"])
+    # Then: the build is refused because the derivation steps have no ledger rows.
+    assert missing.returncode == 2 and "eq:1a" in missing.stderr
+
+
 def _equation_paragraph(path: Path, token: str) -> ET.Element:
     root = ET.fromstring(part(path, "word/document.xml"))
     found = [el for el in root.findall(f".//{W_NS}p") if token in "".join(el.itertext())]
@@ -886,6 +923,7 @@ def main() -> None:
         ("native-reject", test_unsupported_math_does_not_fall_back),
         ("eq-number", test_equation_number_is_required),
         ("eq-accent", test_hat_becomes_accent),
+        ("eq-substep", test_sub_numbered_derivation_steps),
         ("author-year", test_author_year_does_not_require_bracket_keys),
         ("author-year-missing", test_author_year_missing_citation_is_rejected),
         ("numbered-style", test_numbered_style_still_requires_keys),

@@ -19,7 +19,7 @@ from manuscript import (
 )
 
 OWN_WORK: Final = ("이 문서", "이 교재", "본 연구", "this document")
-EQ_NUMBER_RE: Final = re.compile(r"\((\d+)\)")
+EQ_NUMBER_RE: Final = re.compile(r"\((\d+[a-z]?)\)")
 _NAME: Final = r"[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'’\-]+"
 _NAMES: Final = rf"{_NAME}(?:\s+{_NAME}){{0,5}}(?:\s+et\s+al\.)?"
 AUTHOR_YEAR_RE: Final = re.compile(rf"(?:\(\s*)?{_NAMES}\s*(?:,\s*|\(\s*)\d{{4}}\s*\)?")
