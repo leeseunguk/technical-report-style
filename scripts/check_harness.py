@@ -321,8 +321,8 @@ def test_linear_equation_preserves_source(tmp: Path) -> None:
         json.dumps(
             {
                 "blocks": [
-                    {"type": "eq", "lines": [text], "source": "this document"},
-                    {"type": "p", "text": "EQNOTE this document."},
+                    {"type": "eq", "lines": [f"{text}    (7)"], "source": "this document"},
+                    {"type": "p", "text": "EQNOTE (7) this document."},
                 ]
             }
         ),
@@ -338,10 +338,9 @@ def test_linear_equation_preserves_source(tmp: Path) -> None:
     assert spec.read_bytes() == before
     assert sha256(TEMPLATE) == template
     paragraph = _equation_paragraph(output, text)
-    assert paragraph.find(f".//{W_NS}t") is None
     omath = paragraph.find(f".//{MATH}oMath")
     assert omath is not None and "".join(omath.itertext()) == text
-    assert paragraph.find(f".//{MATH}oMathPara") is not None
+    _assert_number_flush_right(paragraph, "(7)")
     Document(str(output))
 
 
@@ -374,7 +373,7 @@ def test_latex_source_becomes_native_omml(tmp: Path) -> None:
     assert b"\\frac" not in blob and b"\\sqrt" not in blob and b"\\sum" not in blob
     assert b"SOURCE_LINEAR" not in blob
     paragraph = _equation_paragraph(output, "(4)")
-    assert paragraph.find(f".//{W_NS}t") is None
+    _assert_number_flush_right(paragraph, "(4)")
     rads = paragraph.findall(f".//{MATH}rad")
     assert len(rads) == 2
     for radical in rads:
@@ -427,6 +426,71 @@ def test_unsupported_math_does_not_fall_back(tmp: Path) -> None:
         assert result.returncode == 2 and "math_conversion" in result.stderr
         assert not output.exists()
         assert latex not in result.stderr
+
+
+def _assert_number_flush_right(paragraph: ET.Element, label: str) -> None:
+    """The number is body text after a right tab, outside Office Math, at the text edge."""
+    omath = paragraph.find(f".//{MATH}oMath")
+    assert omath is not None and label not in "".join(omath.itertext())
+    assert paragraph.find(f".//{MATH}oMathPara") is None
+    stops = {tab.get(f"{W_NS}val") for tab in paragraph.findall(f"{W_NS}pPr/{W_NS}tabs/{W_NS}tab")}
+    assert stops == {"center", "right"}
+    children = list(paragraph)
+    position = children.index(omath)
+    tail = children[position + 1 :]
+    assert any(run.find(f"{W_NS}tab") is not None for run in tail)
+    assert "".join("".join(run.itertext()) for run in tail).strip() == label
+    head = children[:position]
+    assert any(run.find(f"{W_NS}tab") is not None for run in head)
+
+
+def test_hat_becomes_accent(tmp: Path) -> None:
+    """A hat over a symbol is an Office Math accent, not an upper limit holding "^"."""
+    # Given: a numbered unit-vector equation.
+    spec = tmp / "hat.json"
+    spec.write_text(
+        json.dumps(
+            {
+                "blocks": [
+                    {"type": "eq", "lines": ["HATLINE    (2)"], "latex": [r"\hat{\mathbf{z}}=1"], "source": "this document"},
+                    {"type": "p", "text": "(2) this document."},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp / "hat.docx"
+    # When: the real CLI builds it.
+    result = run_cli(["--manuscript", str(spec), "--output", str(output), "--mode", "new"])
+    # Then: one m:acc with a combining circumflex and no limUpp remain.
+    assert result.returncode == 0, result.stderr
+    paragraph = _equation_paragraph(output, "(2)")
+    accents = paragraph.findall(f".//{MATH}acc")
+    assert len(accents) == 1 and accents[0].find(f"{MATH}accPr/{MATH}chr").get(f"{MATH}val") == "\u0302"
+    assert paragraph.find(f".//{MATH}limUpp") is None
+
+
+def test_equation_number_is_required(tmp: Path) -> None:
+    """Every equation line carries a "(n)" number; a bare line writes no document."""
+    # Given: an explained equation whose line has no number.
+    spec = tmp / "no-number.json"
+    spec.write_text(
+        json.dumps(
+            {
+                "blocks": [
+                    {"type": "eq", "lines": ["y = 1"], "source": "this document"},
+                    {"type": "p", "text": "The line is a constant from this document."},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp / "no-number.docx"
+    # When: the real CLI attempts the build.
+    result = run_cli(["--manuscript", str(spec), "--output", str(output), "--mode", "new"])
+    # Then: the build is refused with the number error.
+    assert result.returncode == 2 and "missing_equation_number" in result.stderr
+    assert not output.exists()
 
 
 def _equation_paragraph(path: Path, token: str) -> ET.Element:
@@ -566,7 +630,7 @@ def test_equation_without_explanation_fails(tmp: Path) -> None:
     """An equation needs a following body paragraph, and a number needs a mention."""
     bare = tmp / "bare.json"
     bare.write_text(
-        json.dumps({"blocks": [{"type": "eq", "lines": ["y = 1"], "source": "this document"}]}),
+        json.dumps({"blocks": [{"type": "eq", "lines": ["y = 1    (1)"], "source": "this document"}]}),
         encoding="utf-8",
     )
     numbered = tmp / "numbered-eq.json"
@@ -597,8 +661,8 @@ def test_equation_source_must_be_in_prose(tmp: Path) -> None:
         json.dumps(
             {
                 "blocks": [
-                    {"type": "eq", "lines": ["y = 1"], "source": "this document"},
-                    {"type": "p", "text": "The line is a constant."},
+                    {"type": "eq", "lines": ["y = 1    (1)"], "source": "this document"},
+                    {"type": "p", "text": "The line (1) is a constant."},
                 ]
             }
         ),
@@ -618,10 +682,10 @@ def test_unknown_author_year_in_source_fails(tmp: Path) -> None:
             {
                 "citation_style": "author-year",
                 "blocks": [
-                    {"type": "eq", "lines": ["y = 1"], "source": "Unknown Person, 1999"},
+                    {"type": "eq", "lines": ["y = 1    (1)"], "source": "Unknown Person, 1999"},
                     {
                         "type": "p",
-                        "text": "The line follows Unknown Person, 1999. Known Author, 2020 is listed.",
+                        "text": "The line (1) follows Unknown Person, 1999. Known Author, 2020 is listed.",
                     },
                 ],
                 "references": [
@@ -648,8 +712,8 @@ def test_missing_source_file_fails(tmp: Path) -> None:
         json.dumps(
             {
                 "blocks": [
-                    {"type": "eq", "lines": ["y = 1"], "source": "missing/no-such-file.py"},
-                    {"type": "p", "text": "See missing/no-such-file.py."},
+                    {"type": "eq", "lines": ["y = 1    (1)"], "source": "missing/no-such-file.py"},
+                    {"type": "p", "text": "See (1) and missing/no-such-file.py."},
                 ]
             }
         ),
@@ -708,7 +772,7 @@ def test_example_ledger_emits_native_math(tmp: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     paragraph = _equation_paragraph(output, "y = ax + b")
-    assert paragraph.find(f".//{MATH}oMath") is not None
+    _assert_number_flush_right(paragraph, "(1)")
     assert b"layout" not in part(output, "word/document.xml")
 
 
@@ -820,6 +884,8 @@ def main() -> None:
         ("native-source", test_linear_equation_preserves_source),
         ("native-omml", test_latex_source_becomes_native_omml),
         ("native-reject", test_unsupported_math_does_not_fall_back),
+        ("eq-number", test_equation_number_is_required),
+        ("eq-accent", test_hat_becomes_accent),
         ("author-year", test_author_year_does_not_require_bracket_keys),
         ("author-year-missing", test_author_year_missing_citation_is_rejected),
         ("numbered-style", test_numbered_style_still_requires_keys),

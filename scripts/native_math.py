@@ -17,11 +17,33 @@ _TRAILING_NUMBER: Final = re.compile(r".+\s+\((\d+)\)")
 Converter = Callable[[str], str]
 
 
+def equation_number(line: str) -> str | None:
+    """The "(n)" label of one equation line, leading or trailing, or None."""
+    stripped = line.strip()
+    for pattern in (_LEADING_NUMBER, _TRAILING_NUMBER):
+        found = pattern.fullmatch(stripped)
+        if found is not None:
+            return found.group(1)
+    return None
+
+
+def equation_body(line: str) -> str:
+    """The equation line without its "(n)" label."""
+    stripped = line.strip()
+    number = equation_number(stripped)
+    if number is None:
+        return stripped
+    token = f"({number})"
+    if stripped.startswith(token):
+        return stripped[len(token) :].strip()
+    return stripped[: stripped.rindex(token)].strip()
+
+
 def equation_math(line: str, latex: str | None) -> etree._Element:
-    """One native equation. Without latex, the line text is preserved exactly."""
+    """One native equation without its number. The number is set outside Office Math."""
     if latex is None:
-        return _literal(line)
-    return _with_number(_from_latex(latex), line)
+        return _literal(equation_body(line))
+    return _from_latex(latex)
 
 
 def equation_xml(line: str, latex: str | None) -> str:
@@ -63,6 +85,43 @@ def complete_math_arguments(root: etree._Element) -> int:
     return count
 
 
+_ACCENTS: Final = {
+    "^": "\u0302",
+    "\u02c6": "\u0302",
+    "~": "\u0303",
+    "\u02dc": "\u0303",
+    "\u00af": "\u0305",
+    "\u203e": "\u0305",
+    "\u2192": "\u20d7",
+    "\u02d9": "\u0307",
+    "\u00a8": "\u0308",
+}
+
+
+def accents_from_limits(root: etree._Element) -> int:
+    """Turn an upper limit holding one accent mark (\\hat, \\tilde, \\vec) into m:acc."""
+    count = 0
+    for upper in root.findall(f".//{{{MATH_NS}}}limUpp"):
+        limit = upper.find(f"{{{MATH_NS}}}lim")
+        base = upper.find(f"{{{MATH_NS}}}e")
+        if limit is None or base is None:
+            continue
+        mark = "".join(limit.itertext()).strip()
+        if mark not in _ACCENTS:
+            continue
+        accent = etree.Element(f"{{{MATH_NS}}}acc")
+        props = etree.SubElement(accent, f"{{{MATH_NS}}}accPr")
+        char = etree.SubElement(props, f"{{{MATH_NS}}}chr")
+        char.set(f"{{{MATH_NS}}}val", _ACCENTS[mark])
+        accent.append(base)
+        parent = upper.getparent()
+        if parent is None:
+            continue
+        parent.replace(upper, accent)
+        count += 1
+    return count
+
+
 def _converters() -> tuple[Converter, Converter]:
     try:
         from latex2mathml.converter import convert as to_mathml
@@ -82,6 +141,7 @@ def _from_latex(latex: str) -> etree._Element:
     if len(wrapper) != 1 or wrapper[0].tag != f"{{{MATH_NS}}}oMath":
         raise ValueError("conversion failed")
     _ = complete_math_arguments(wrapper[0])
+    _ = accents_from_limits(wrapper[0])
     _require_complete(wrapper[0])
     return wrapper[0]
 
@@ -113,28 +173,6 @@ def _has_text(node: etree._Element) -> bool:
 def _literal(text: str) -> etree._Element:
     omath = etree.Element(f"{{{MATH_NS}}}oMath", nsmap={"m": MATH_NS})
     omath.append(_plain_run(text))
-    return omath
-
-
-def _with_number(omath: etree._Element, line: str) -> etree._Element:
-    stripped = line.strip()
-    leading = _LEADING_NUMBER.fullmatch(stripped)
-    parent = _content_parent(omath)
-    if leading is not None:
-        parent.insert(0, _plain_run(f"({leading.group(1)})\u2001\u2001"))
-        return omath
-    trailing = _TRAILING_NUMBER.fullmatch(stripped)
-    if trailing is not None:
-        parent.append(_plain_run(f"\u2001\u2001({trailing.group(1)})"))
-    return omath
-
-
-def _content_parent(omath: etree._Element) -> etree._Element:
-    box = omath.find(f"{{{MATH_NS}}}box")
-    if box is not None:
-        expression = box.find(f"{{{MATH_NS}}}e")
-        if expression is not None:
-            return expression
     return omath
 
 

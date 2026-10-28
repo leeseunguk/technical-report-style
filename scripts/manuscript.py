@@ -15,6 +15,7 @@ from errors import ManuscriptError
 KEY_PATTERN: Final = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,64}$"
 CITATION_RE: Final = re.compile(r"(?<![\w\]])\[([A-Za-z0-9][A-Za-z0-9._:-]{0,64})\]")
 LATEX_MARKERS: Final = ("\\", "$$")
+EQUATION_NUMBER_RE: Final = re.compile(r"\(\d+\)\s+.+|.+\s+\(\d+\)")
 
 
 class FrozenModel(BaseModel):
@@ -258,6 +259,9 @@ def _check_blocks(manuscript: Manuscript, assets: dict[str, Path]) -> None:
                     raise ManuscriptError("malformed_manuscript", "latex line count")
                 if latex is not None and any(item.strip() == "" for item in latex):
                     raise ManuscriptError("malformed_manuscript", "empty latex line")
+                for number_index, line in enumerate(lines):
+                    if EQUATION_NUMBER_RE.fullmatch(line.strip()) is None:
+                        raise ManuscriptError("missing_equation_number", f"line {number_index + 1}")
             case HeadingBlock() | ParagraphBlock():
                 pass
             case unreachable:

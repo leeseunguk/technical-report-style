@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Final, assert_never
 
 from docx.document import Document as DocumentType
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
 from docx.shared import Emu, Pt, RGBColor
@@ -25,7 +25,7 @@ from manuscript import (
     has_table,
     heading_levels,
 )
-from native_math import equation_xml
+from native_math import equation_number, equation_xml
 
 FIGURE_WIDTH_CM: Final = 15.5
 FIGURE_HEIGHT_CM: Final = 17.0
@@ -61,6 +61,7 @@ def render(document: DocumentType, loaded: LoadedManuscript) -> None:
             case EquationBlock() as equation:
                 add_equation(document, equation)
             case TableBlock(headers=headers, rows=rows):
+                _keep_last_paragraph_with_next(document)
                 add_table(document, headers, rows)
             case FigureBlock() as figure:
                 add_figure(document, figure_path(loaded, figure), figure.caption)
@@ -164,32 +165,44 @@ def add_paragraph(document: DocumentType, text: str) -> Paragraph:
 
 
 def add_equation(document: DocumentType, block: EquationBlock) -> None:
-    """Centered native Office Math. The conversion source is not written."""
+    """Centered native Office Math with its "(n)" number flush right on the same line.
+
+    A center tab stop at half the text width holds the equation and a right tab stop at
+    the text width holds the number, the way the textbook sets numbered display math.
+    """
     sources = block.latex
     last = len(block.lines) - 1
+    center, right = _equation_tab_positions(document)
     for index, line in enumerate(block.lines):
         latex = None if sources is None else sources[index]
+        number = equation_number(line)
+        if number is None:
+            raise ManuscriptError("missing_equation_number", f"line {index + 1}")
         name = body_style(document)
         paragraph = document.add_paragraph(style=name) if name is not None else document.add_paragraph()
+        layout = paragraph.paragraph_format
+        layout.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        layout.first_line_indent = Emu(0)
+        layout.left_indent = Emu(0)
+        layout.right_indent = Emu(0)
+        layout.tab_stops.add_tab_stop(center, WD_TAB_ALIGNMENT.CENTER)
+        layout.tab_stops.add_tab_stop(right, WD_TAB_ALIGNMENT.RIGHT)
         if index != last:
-            paragraph.paragraph_format.keep_with_next = True
+            layout.keep_with_next = True
         try:
             math_xml = equation_xml(line, latex)
         except ValueError:
             raise ManuscriptError("math_conversion", f"line {index + 1}") from None
-        paragraph._p.append(_office_display(math_xml))
+        paragraph.add_run("\t")
+        paragraph._p.append(parse_xml(math_xml))
+        paragraph.add_run(f"\t({number})")
 
 
-def _office_display(math_xml: str):
-    """Display equation centered the way the textbook centers Office Math."""
-    display = OxmlElement("m:oMathPara")
-    props = OxmlElement("m:oMathParaPr")
-    justify = OxmlElement("m:jc")
-    justify.set(qn("m:val"), "center")
-    props.append(justify)
-    display.append(props)
-    display.append(parse_xml(math_xml))
-    return display
+def _equation_tab_positions(document: DocumentType) -> tuple[Emu, Emu]:
+    """Center and right tab positions measured from the left margin of the last section."""
+    section = document.sections[-1]
+    width = int(section.page_width) - int(section.left_margin) - int(section.right_margin)
+    return Emu(width // 2), Emu(width)
 
 
 def add_table(document: DocumentType, headers: list[str], rows: list[list[str]]) -> None:
@@ -201,16 +214,64 @@ def add_table(document: DocumentType, headers: list[str], rows: list[list[str]])
     table = document.add_table(rows=1, cols=len(headers))
     # python-docx omits tblStyle when the style is the document default. The textbook writes it.
     _set_table_style(table, style_id)
-    table.autofit = True
+    # Fixed width: autofit sizes columns from the longest unbreakable token and
+    # pushes wide tables past the page edge (e.g. ratio ranges like 0.9999968-0.9999977).
+    _set_table_width(table, content_width_emu(document), len(headers))
     for index, header in enumerate(headers):
         cell = table.rows[0].cells[index]
         cell.text = ""
         add_run(cell.paragraphs[0], header, bold=True)
     for row in rows:
-        cells = table.add_row().cells
+        row_element = table.add_row()
+        _keep_row_together(row_element)
+        cells = row_element.cells
         for index, value in enumerate(row):
             cells[index].text = ""
             add_run(cells[index].paragraphs[0], value)
+
+
+def _set_table_width(table: Table, width_emu: int, columns: int) -> None:
+    """Pin the table and every column to the content width so cells wrap instead of overflowing."""
+    twips = str(round(width_emu / 635))
+    tbl_pr = table._tbl.tblPr
+    element = tbl_pr.find(qn("w:tblW"))
+    if element is None:
+        element = OxmlElement("w:tblW")
+        tbl_pr.append(element)
+    element.set(qn("w:w"), twips)
+    element.set(qn("w:type"), "dxa")
+    grid = table._tbl.find(qn("w:tblGrid"))
+    if grid is not None:
+        for child in list(grid):
+            grid.remove(child)
+    else:
+        grid = OxmlElement("w:tblGrid")
+        table._tbl.insert(1, grid)
+    each = str(round(width_emu / 635 / columns))
+    for _ in range(columns):
+        col = OxmlElement("w:gridCol")
+        col.set(qn("w:w"), each)
+        grid.append(col)
+    for cell in table.rows[0].cells:
+        cell_pr = cell._tc.get_or_add_tcPr()
+        cell_w = OxmlElement("w:tcW")
+        cell_w.set(qn("w:w"), each)
+        cell_w.set(qn("w:type"), "dxa")
+        cell_pr.append(cell_w)
+
+
+def _keep_last_paragraph_with_next(document: DocumentType) -> None:
+    """Keep the sentence introducing a table on the same page as the table."""
+    if not document.paragraphs:
+        return
+    document.paragraphs[-1].paragraph_format.keep_with_next = True
+
+
+def _keep_row_together(row: object) -> None:
+    """Stop a row from splitting across a page, which leaves orphaned cell fragments."""
+    tr_pr = row._tr.get_or_add_trPr()
+    flag = OxmlElement("w:cantSplit")
+    tr_pr.append(flag)
 
 
 def _set_table_style(table: Table, style_id: str) -> None:

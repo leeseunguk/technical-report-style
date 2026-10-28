@@ -1,5 +1,16 @@
 [
   {
+    "item": "eq:1",
+    "location": "식 (1)",
+    "citation": "이 교재의 배치 규약",
+    "kind": "convention",
+    "checked_against": {
+      "file": "./illustrative.png",
+      "symbol": "equation layout"
+    },
+    "status": "verified"
+  },
+  {
     "item": "fig:A",
     "location": "그림 A",
     "citation": "이 교재의 배치 예시",

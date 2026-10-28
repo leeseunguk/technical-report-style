@@ -224,3 +224,17 @@ ledger copy of a caption is not a duplicate. On the reviewer manuscript it repor
 2 errors and negation 24%; on the rewrite it reports `PROSE_OK` and 16%.
 The harness adds `prose-check` (15 groups, all PASS). The checker does not judge
 meaning, science or tone beyond these patterns.
+
+## 2026-10-15 식 번호 필수와 오른쪽 정렬
+
+- `eq.lines`의 모든 줄은 앞 또는 끝에 `(n)` 번호가 있어야 한다. 없으면
+  `manuscript.py`가 `missing_equation_number`로 거부한다.
+- `render.add_equation`은 `m:oMathPara` 가운데 정렬 대신 본문 문단에 가운데 탭
+  (본문 너비/2)과 오른쪽 탭(본문 너비)을 두고 `탭 · m:oMath · 탭 (n)` 순서로
+  쓴다. 번호는 수식 밖 본문 글자다. `native_math.equation_math`는 번호 없는
+  수식만 만든다.
+- 하네스 `eq-number`, `native-source`, `native-omml`, `ledger-example`,
+  `check_style`이 번호 필수, 탭 두 개, 수식 뒤 번호 위치를 검사한다.
+- `\hat`, `\tilde` 같은 위 강세는 변환기가 `m:limUpp` + 글자 `^`로 내므로
+  `accents_from_limits`가 `m:acc`(결합 강세 문자)로 바꾼다. 하네스 `eq-accent`.
+  2026-10-15 `uv run --with pydantic --with typer check_harness.py` 전부 PASS.
