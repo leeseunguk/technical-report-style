@@ -221,6 +221,10 @@ def add_table(document: DocumentType, headers: list[str], rows: list[list[str]])
         cell = table.rows[0].cells[index]
         cell.text = ""
         add_run(cell.paragraphs[0], header, bold=True)
+        # Keep the header with the first data row so it never sits alone at a page bottom.
+        cell.paragraphs[0].paragraph_format.keep_with_next = True
+    _keep_row_together(table.rows[0])
+    _repeat_header(table.rows[0])
     for row in rows:
         row_element = table.add_row()
         _keep_row_together(row_element)
@@ -272,6 +276,12 @@ def _keep_row_together(row: object) -> None:
     tr_pr = row._tr.get_or_add_trPr()
     flag = OxmlElement("w:cantSplit")
     tr_pr.append(flag)
+
+
+def _repeat_header(row: object) -> None:
+    """Repeat the header row on every page a long table continues onto."""
+    tr_pr = row._tr.get_or_add_trPr()
+    tr_pr.append(OxmlElement("w:tblHeader"))
 
 
 def _set_table_style(table: Table, style_id: str) -> None:
